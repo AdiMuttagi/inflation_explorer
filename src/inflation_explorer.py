@@ -10,16 +10,18 @@ SERIES = {
     "Housing": "CUSR0000SEEA"
 }
 
-def fetch_cpi(series_codes, start="2000-01-01", end=None):
-    frames = []
-    for name, code in series_codes.items():
-        df = pdr.DataReader(code, "fred", start, end)
-        df = df.rename(columns={code: name})
-        frames.append(df)
-    return pd.concat(frames, axis=1)
+def fetch_cpi(data_dictionary, start_date="2000-01-01", end_date=None):
+    all_data = []
+    for category_name in data_dictionary:
+        fred_code = data_dictionary[category_name]
+        data = pdr.DataReader(fred_code, "fred", start_date, end_date)
+        data = data.rename(columns={fred_code: category_name})
+        all_data.append(data)
+    result = pd.concat(all_data, axis = 1)
+    return result
 
 def calculate_yoy(df):
-    yoy = df.pct_change(periods=12) * 100
+    yoy = df.pct_change(periods=12, fill_method=None) * 100
     return yoy.dropna()
 
 def plot_inflation(yoy, title="Year-over-Year Inflation by Category"):
@@ -39,11 +41,11 @@ def calculate_rolling_stats(yoy, window=12):
     rolling_std = yoy.rolling(window=window).std()
     return rolling_mean, rolling_std
 
-def event_driven(yoy, top_n=3):
-    spikes = yoy["All Items"].nlargest(top_n)
-    print(f"Top {top_n} inflation spikes (All Items):")
-    for date, val in spikes.items():
-        print(f"  {date.date()}: {val:.2f}%")
+def show_biggest_inflation_spikes(yoy_data, how_many=3):
+    top_spikes = yoy_data["All Items"].nlargest(how_many)
+    print(f"Top {how_many} inflation months (All Items)")
+    for date, value in top_spikes.items():
+        print(date.strftime("%Y-%m-%d"), round(value, 2))
 
 def forecast_trend(yoy, periods=12):
     series = yoy["All Items"]
@@ -59,33 +61,17 @@ def forecast_trend(yoy, periods=12):
     )
     return pd.Series(y_future, index=future_dates)
 
-def forecast_ar1(yoy, periods=12):
-    series = yoy["All Items"]
-    y1 = series.iloc[1:].values
-    x1 = series.iloc[:-1].values
-    a, b = np.polyfit(x1, y1, 1)
-    last = series.iloc[-1]
-    forecasts = []
-    for _ in range(periods):
-        pred = a * last + b
-        forecasts.append(pred)
-        last = pred
-    future_dates = pd.date_range(
-        start=series.index[-1] + pd.DateOffset(months=1),
-        periods=periods,
-        freq='MS'
-    )
-    return pd.Series(forecasts, index=future_dates)
-
 def main():
-    cpi = fetch_cpi(SERIES, start="2000-01-01")
+    cpi = fetch_cpi(SERIES, start_date="2000-01-01")
     cpi.to_csv("data/cpi_categories.csv")
 
     yoy = calculate_yoy(cpi)
     yoy.to_csv("data/yoy_categories.csv")
 
-    print("\nMost recent 5 year-over-year inflation rates (All Items):")
-    print(yoy["All Items"].tail(), "\n")
+    recent_inflation = yoy["All Items"].tail()
+    print("Most recent 5 months of inflation (All Items):")
+    print(recent_inflation)
+    print()
 
     plot_inflation(yoy)
 
@@ -112,22 +98,17 @@ def main():
     plt.tight_layout()
     plt.show()
 
-    event_driven(yoy)
+    show_biggest_inflation_spikes(yoy)
 
     # Forecasts
     trend_forecast = forecast_trend(yoy, periods=12)
     print("\nForecast for the next 12 months using linear trend model:")
     print(trend_forecast, "\n")
 
-    ar1_forecast = forecast_ar1(yoy, periods=12)
-    print("Forecast for the next 12 months using AR(1) model:")
-    print(ar1_forecast, "\n")
-
     # Plot forecasts vs historical
     plt.figure(figsize=(12, 6))
     plt.plot(yoy.index, yoy["All Items"], label="Historical YoY")
     plt.plot(trend_forecast.index, trend_forecast, linestyle="--", label="Trend Forecast")
-    plt.plot(ar1_forecast.index, ar1_forecast, linestyle=":", label="AR(1) Forecast")
     plt.title("Historical and Forecasted YoY Inflation (All Items)")
     plt.xlabel("Date")
     plt.ylabel("Inflation Rate (%)")
