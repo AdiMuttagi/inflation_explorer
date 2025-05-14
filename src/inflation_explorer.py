@@ -11,6 +11,17 @@ SERIES = {
 }
 
 def fetch_cpi(data_dictionary, start_date="2000-01-01", end_date=None):
+    """
+    Downloads CPI data from FRED for each category in the dictionary.
+
+    Parameters:
+        data_dictionary (dict): Mapping of category names to FRED codes.
+        start_date (str): Start date in "YYYY-MM-DD" format.
+        end_date (str or None): End date in "YYYY-MM-DD" format or None.
+
+    Returns:
+        DataFrame with CPI values for each category and date.
+    """
     all_data = []
     for category_name in data_dictionary:
         fred_code = data_dictionary[category_name]
@@ -21,10 +32,26 @@ def fetch_cpi(data_dictionary, start_date="2000-01-01", end_date=None):
     return result
 
 def calculate_yoy(df):
+    """
+    Calculates year-over-year (YoY) percent change for each column.
+
+    Parameters:
+        df (DataFrame): Raw CPI data with monthly values.
+
+    Returns:
+        DataFrame with YoY percent change for each category.
+    """
     yoy = df.pct_change(periods=12, fill_method=None) * 100
     return yoy.dropna()
 
 def plot_inflation(yoy, title="Year-over-Year Inflation by Category"):
+    """
+    Plots YoY inflation data for all categories on a single line chart.
+
+    Parameters:
+        yoy (DataFrame): Year-over-year inflation data.
+        title (str): Plot title.
+    """
     plt.figure(figsize=(12, 6))
     for col in yoy.columns:
         plt.plot(yoy.index, yoy[col], label=col)
@@ -37,17 +64,44 @@ def plot_inflation(yoy, title="Year-over-Year Inflation by Category"):
     plt.show()
 
 def calculate_rolling_stats(yoy, window=12):
+    """
+    Calculates rolling mean and standard deviation over a given window.
+
+    Parameters:
+        yoy (DataFrame): YoY inflation data.
+        window (int): Number of months to use in rolling calculations.
+
+    Returns:
+        Tuple of (rolling_mean, rolling_std) DataFrames.
+    """
     rolling_mean = yoy.rolling(window=window).mean()
     rolling_std = yoy.rolling(window=window).std()
     return rolling_mean, rolling_std
 
 def show_biggest_inflation_spikes(yoy_data, how_many=3):
+    """
+    Prints the top N highest YoY inflation months from the data.
+
+    Parameters:
+        yoy_data (DataFrame): Year-over-year inflation data.
+        how_many (int): Number of top inflation months to show.
+    """
     top_spikes = yoy_data["All Items"].nlargest(how_many)
     print(f"Top {how_many} inflation months (All Items)")
     for date, value in top_spikes.items():
         print(date.strftime("%Y-%m-%d"), round(value, 2))
 
 def forecast_trend(yoy, periods=12):
+    """
+    Forecasts future inflation using a simple linear trend model.
+
+    Parameters:
+        yoy (DataFrame): Historical YoY inflation data.
+        periods (int): Number of future months to forecast.
+
+    Returns:
+        Series with forecasted inflation values and future dates.
+    """
     series = yoy["All Items"]
     x = np.arange(len(series))
     y = series.values
@@ -62,6 +116,14 @@ def forecast_trend(yoy, periods=12):
     return pd.Series(y_future, index=future_dates)
 
 def main():
+    """
+    Main function that runs the full inflation analysis pipeline:
+    - Fetches CPI data
+    - Calculates YoY inflation
+    - Plots inflation trends and rolling stats
+    - Forecasts future inflation using a trend line
+    - Saves output to CSV files
+    """
     cpi = fetch_cpi(SERIES, start_date="2000-01-01")
     cpi.to_csv("data/cpi_categories.csv")
 
